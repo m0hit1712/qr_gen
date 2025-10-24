@@ -28,7 +28,9 @@ Designed to handle sensitive or structured data securely in QR format.
 ## Installation
 
 1. Clone the repository
->git clone <repo-url> cd <repo-folder>
+> git clone https://github.com/m0hit1712/qr_gen.git
+
+> cd qr_gen
 2. Install Python dependencies:
 >pip install -r requirements.txt
 3. Linux users: Install ZBar for pyzbar:
@@ -39,7 +41,8 @@ Designed to handle sensitive or structured data securely in QR format.
 
 ### Generate QR Codes
 
-1. Place data folders inside `data/` =>`data/d1/image.jpg data/d1/data.json`
+1. Place data folders inside `data/` =>`data/d1/image.jpg data/d1/data.json` 
+2. Follow (d1, d2, d3, ... dn) format for data directories
 2. Run the generator:
 > python qr_scanner.py qr_codes/d1_qr.png
 3. Output:
