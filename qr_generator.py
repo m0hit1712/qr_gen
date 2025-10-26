@@ -1,7 +1,6 @@
 import os
 import json
 import base64
-import qrcode
 import logging
 from io import BytesIO
 from PIL import Image
@@ -10,12 +9,13 @@ from cryptography.hazmat.backends import default_backend
 
 # ---------- CONFIG ----------
 MAX_IMAGE_SIZE_BYTES = 1000
+compression_step = 100
 DATA_DIR = "data"
 OUTPUT_DIR = "qr_codes"
 STATIC_KEY = b"1234567890abcdef1234567890abcdef"  # 32 bytes for AES-256
 STATIC_IV = b"abcdef1234567890"                   # 16 bytes for AES CBC
 MAX_QR_SIZE_BYTES = 2900                          # Safe QR capacity (~3 KB)
-MAX_FILE_SIZE_MB = 2                              # Sanity check for files
+MAX_FILE_SIZE_MB = 0.5                              # Sanity check for files
 
 # ---------- LOGGING SETUP ----------
 logging.basicConfig(
@@ -39,32 +39,44 @@ def encrypt_data(data: bytes) -> bytes:
     return encrypted
 
 def compress_image_in_memory(image_path: str, max_size_bytes: int = MAX_IMAGE_SIZE_BYTES) -> bytes:
-    """Compress the image to stay below the target size (in memory)."""
+    """Compress the image to stay below the target size (in memory), forcefully."""
     with Image.open(image_path) as img:
         img = img.convert("RGB")  # ensure consistent format
-
         quality = 85
         step = 5
         buffer = BytesIO()
+        width, height = img.size
 
-        while quality > 5:
+        while True:
             buffer.seek(0)
             buffer.truncate(0)
             img.save(buffer, format="JPEG", quality=quality, optimize=True)
             size = buffer.tell()
 
             if size <= max_size_bytes:
-                logging.info(f"Compressed image to {size} bytes (quality={quality})")
                 buffer.seek(0)
+                logging.info(f"Compressed image to {size} bytes (quality={quality})")
                 return buffer.read()
 
-            quality -= step
+            # Lower quality first
+            if quality > 5:
+                quality -= step
+                continue
 
-        # If still large, just return the smallest one
-        buffer.seek(0)
-        compressed_data = buffer.read()
-        logging.warning(f"Could not reach {max_size_bytes} bytes limit (final size={len(compressed_data)} bytes)")
-        return compressed_data
+            # If quality is already low, resize image
+            width = int(width * 0.9)
+            height = int(height * 0.9)
+            img = img.resize((width, height), Image.ANTIALIAS)
+            quality = 85  # reset quality after resizing
+
+            logging.debug(f"Resizing image to {width}x{height} to fit size limit ({max_size_bytes} bytes)")
+
+            # Safety: break if image gets ridiculously small
+            if width < 50 or height < 50:
+                buffer.seek(0)
+                logging.warning(f"Image forcibly compressed to smallest possible size ({size} bytes)")
+                return buffer.read()
+
 
 
 def combine_data(image_path: str, json_path: str) -> bytes:
@@ -99,21 +111,35 @@ def combine_data(image_path: str, json_path: str) -> bytes:
     return serialized
 
 
+# def generate_qr(encrypted_data: bytes, output_path: str):
+#     """Generate and save a QR code."""
+#     encoded_text = base64.b64encode(encrypted_data).decode()
+#     logging.info(f"Base64 encoded data size: {len(encoded_text)} characters")
+#
+#     qr = qrcode.QRCode(
+#         version=None,
+#         error_correction=qrcode.constants.ERROR_CORRECT_M,
+#         box_size=10,
+#         border=4,
+#     )
+#     qr.add_data(encoded_text)
+#     qr.make(fit=True)
+#     img = qr.make_image(fill_color="black", back_color="white")
+#     img.save(output_path)
+#     logging.info(f"QR code saved at: {output_path}")
+
+import segno
+
 def generate_qr(encrypted_data: bytes, output_path: str):
-    """Generate and save a QR code."""
+    """Generate and save a QR code using segno."""
     encoded_text = base64.b64encode(encrypted_data).decode()
     logging.info(f"Base64 encoded data size: {len(encoded_text)} characters")
 
-    qr = qrcode.QRCode(
-        version=None,
-        error_correction=qrcode.constants.ERROR_CORRECT_M,
-        box_size=10,
-        border=4,
-    )
-    qr.add_data(encoded_text)
-    qr.make(fit=True)
-    img = qr.make_image(fill_color="black", back_color="white")
-    img.save(output_path)
+    # Generate QR with error correction M (~15%)
+    qr = segno.make(encoded_text, error='m')  # segno handles large payloads automatically
+
+    # Save QR code as PNG
+    qr.save(output_path, scale=10)  # scale similar to box_size
     logging.info(f"QR code saved at: {output_path}")
 
 
