@@ -8,7 +8,7 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 
 # ---------- CONFIG ----------
-MAX_IMAGE_SIZE_BYTES = 1000
+MAX_IMAGE_SIZE_BYTES = 800
 compression_step = 100
 DATA_DIR = "data"
 OUTPUT_DIR = "qr_codes"
@@ -66,7 +66,7 @@ def compress_image_in_memory(image_path: str, max_size_bytes: int = MAX_IMAGE_SI
             # If quality is already low, resize image
             width = int(width * 0.9)
             height = int(height * 0.9)
-            img = img.resize((width, height), Image.ANTIALIAS)
+            img = img.resize((width, height), Image.Resampling.LANCZOS)
             quality = 85  # reset quality after resizing
 
             logging.debug(f"Resizing image to {width}x{height} to fit size limit ({max_size_bytes} bytes)")
